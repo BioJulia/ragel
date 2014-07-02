@@ -74,7 +74,7 @@ if test -z "$COLM"; then
 fi
 
 dnl extract the first two precision points from the version
-COLM_VERSION=[`$COLM -v | sed -n '/version/s/^.*version \([0-9]\+\.[0-9]\+\).*$/\1/p'`]
+COLM_VERSION=[`$COLM -v | sed -n '/version/s/^.*version \([0-9]\{1,\}\.[0-9]\{1,\}\).*$/\1/p'`]
 if test "$COLM_VERSION" != $EXPECTED_COLM_VERSION; then
 	AC_ERROR([expected colm version $EXPECTED_COLM_VERSION, but $COLM_VERSION is installed])
 fi
