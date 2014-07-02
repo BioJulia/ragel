@@ -1,0 +1,336 @@
+include 'trans.lm'
+
+int rw_julia_factor( Factor: indep::factor )
+{
+	if match Factor [`first_token_char]
+	{
+		send Out "data\[ts\]"
+	}
+	else if match Factor [tk_ident `[ expr `]]
+	{
+		send Out
+			"[$Factor.tk_ident]\[ [rw_julia_expr(Factor.expr)] \]
+	}
+	else if match Factor [tk_ident `( expr `)]
+	{
+		send Out
+			"[$Factor.tk_ident]( [rw_julia_expr(Factor.expr)] )
+	}
+	elsif match Factor [`< type `> `( expr `)]
+	{
+		send Out
+			"convert( [rw_julia_type(Factor.type)],  [rw_julia_expr(Factor.expr)] )
+	}
+	elsif match Factor [`( expr `)]
+	{
+		send Out
+			"( [rw_julia_expr(Factor.expr)] )
+	}
+	elsif match Factor ['true']
+	{
+		send Out '1'
+	}
+	elsif match Factor ['false']
+	{
+		send Out '0'
+	}
+	else
+	{
+		send Out [$Factor]
+	}
+}
+
+void rw_julia_type( Type: indep::type )
+{
+	if match Type [`int]
+	{
+		send Out "Int"
+	}
+	elsif match Type [`bool]
+	{
+		send Out "Int"
+	}
+	elsif match Type [`char]
+	{
+		send Out "Int8"
+	}
+	elsif match Type [`ptr]
+	{
+		send Out "Int"
+	}
+	elsif match Type [`byte]
+	{
+		send Out "Uint8"
+	}
+}
+
+
+void rw_julia_expr( Expr: indep::expr )
+{
+	rw_julia_factor( Expr.factor )
+	if ( Expr.op )
+		send Out " [$Expr.op] [rw_julia_expr( Expr._expr )]"
+}
+
+void rw_julia_opt_array( OptArr: indep::opt_arr )
+{
+	if OptArr.expr {
+		send Out "\[[rw_julia_expr( OptArr.expr )]\]"
+	}
+}
+
+int rw_julia_var_decl( VarDecl: indep::var_decl )
+{
+    OptArr: indep::opt_arr = VarDecl.opt_arr
+	if OptArr.expr {
+		send Out
+			"[$VarDecl.tk_ident] = [rw_julia_type( VarDecl.type )]\[\]
+	}
+	else {
+		send Out
+			"[$VarDecl.tk_ident] = zero([rw_julia_type( VarDecl.type )])
+	}
+	#send Out
+	#	"[$VarDecl.tk_ident] = Array([rw_julia_type( VarDecl.type )], [rw_julia_opt_array(VarDecl.opt_arr)] ) ;
+}
+
+void rw_julia_opt_sub( OptSub: indep::opt_sub )
+{
+	if ( OptSub.expr )
+		send Out "\[[rw_julia_expr(OptSub.expr)]\]"
+}
+
+int rw_julia_expr_stmt( ExprStmt: indep::expr_stmt )
+{
+	if match ExprStmt [tk_ident opt_sub `= expr `;]
+	{
+		send Out
+			"[$ExprStmt.tk_ident rw_julia_opt_sub(ExprStmt.opt_sub)] = [rw_julia_expr(ExprStmt.expr)];
+	}
+	else if match ExprStmt [expr `;]
+	{
+		send Out
+			"[rw_julia_expr(ExprStmt.expr)];
+	}
+}
+
+int rw_julia_if_stmt( IfStmt: indep::if_stmt )
+{
+	send Out
+		"if ( [rw_julia_expr( IfStmt.expr )] )
+		"	[rw_julia_stmt_list( IfStmt._repeat_stmt )]
+
+	if ( IfStmt.opt_else._repeat_stmt ) {
+		send Out
+			"else
+			"	[rw_julia_stmt_list( IfStmt.opt_else._repeat_stmt )]
+	}
+	send Out
+		"end
+}
+
+int rw_julia_print_stmt( Stmt: indep::print_stmt )
+{
+	if match Stmt [`print_int expr `;] {
+		send Out
+			"print( [rw_julia_expr(Stmt.expr)] );
+	}
+	else if match Stmt [`print_buf E1: expr `, E2: expr `;]
+	{
+		send Out
+			"print( string ( [rw_julia_expr(E1)]\[:[rw_julia_expr(E2)]\] ));
+	}
+	else if match Stmt [`print_str expr `;]
+	{
+		send Out
+			"print( [rw_julia_expr( Stmt.expr )] );
+	}
+	else if match Stmt [`print_token `;]
+	{
+		send Out
+			"print( data\[ts:te\] );
+	}
+}
+
+int rw_julia_ragel_stmt( Stmt: indep::ragel_stmt )
+{
+	send Out
+		[$Stmt]
+}
+
+int rw_stmt( Stmt: indep::stmt )
+{
+	if match Stmt [var_decl]
+		rw_julia_var_decl( Stmt.var_decl )
+	else if match Stmt [expr_stmt]
+		rw_julia_expr_stmt( Stmt.expr_stmt )
+	else if match Stmt [if_stmt]
+		rw_julia_if_stmt( Stmt.if_stmt )
+	else if match Stmt [print_stmt]
+		rw_julia_print_stmt( Stmt.print_stmt )
+	else if	match Stmt [ragel_stmt]
+		rw_julia_ragel_stmt( Stmt.ragel_stmt )
+}
+
+void rw_julia_stmt_list( StmtList: indep::stmt* )
+{
+	for Stmt: indep::stmt in repeat( StmtList )
+		rw_stmt( Stmt )
+}
+
+int rw_julia_action_block( ActionBlock: indep::action_block )
+{
+	Out = cons parser<out_code::lines> []
+	if match ActionBlock [`{ stmt* `}] {
+		send Out
+			"{[rw_julia_stmt_list( ActionBlock._repeat_stmt )]}
+	}
+	else if match ActionBlock [`{ expr `}] {
+		send Out
+			"{[rw_julia_expr( ActionBlock.expr )]}
+	}
+	send Out [] eos
+}
+
+
+OutputFile: str = argv.pop()
+InputFile: str = argv.pop()
+Lang: str = argv.pop()
+
+Input: stream = open( InputFile "r" )
+Output: stream = open( OutputFile "w" )
+
+RagelTree: indep::start = parse indep::start[ Input ]
+
+if ( !RagelTree ) {
+	print( error '\n' )
+	exit(1)
+}
+
+# Find the machine name.
+MachineName: ragel::machine_name = ragel::machine_name in RagelTree
+
+# Do we need EOF?
+NeedsEof: bool = false
+for CommVal: indep::comm_val in RagelTree {
+	if $CommVal ==
+		'@NEEDS_EOF: yes\n'
+	{
+		NeedsEof = true
+	}
+}
+
+send Output
+	"/*
+	" * @LANG: [Lang]
+	" * @GENERATED: yes
+	" */
+	"
+	" using Switch
+	"
+
+Init: indep::stmt* = RagelTree.Init
+for Stmt: indep::stmt in Init {
+	if match Stmt [Decl: var_decl] {
+		Out = cons parser<out_code::lines> []
+		rw_julia_var_decl( Decl )
+		send Out [] eos
+		send Output [Out.tree]
+	}
+}
+
+Section: indep::section = RagelTree.section
+
+for Action: ragel::action_block in Section {
+	# Reparse as lang-independent code.
+	parse IndepActionBlock: indep::action_block[$Action]
+	if ( !IndepActionBlock ) {
+		print( error '\n' Action )
+		exit(1)
+	}
+
+	# Translate to specific language.
+	rw_julia_action_block( IndepActionBlock )
+
+	# Reparse back to ragel action block.
+	Action = parse ragel::action_block[$Out.tree]
+	if ( !Action ) {
+		print( error '\n' )
+		exit(1)
+	}
+}
+
+prints( Output '\n' Section '\n' )
+
+send Output
+	"cs = 0
+	"
+	"%% write data;
+	"
+	"function prepare()
+    "    global cs, val, neg
+
+
+for Stmt: indep::stmt in Init {
+	if match Stmt [ExprStmt: expr_stmt] {
+		Out = cons parser<out_code::lines> []
+		rw_julia_expr_stmt( ExprStmt )
+		send Out [] eos
+		send Output [Out.tree]
+	}
+}
+
+send Output
+	"    %% write init;
+	"end
+	"
+	"function exec(data)
+    "    global cs, val, neg
+	"    p = 0
+	"    pe = length(data)
+
+if NeedsEof {
+	send Output
+		"	eof = pe
+}
+
+send Output
+	"    %% write exec;
+	"end
+	"
+	"function finish()
+	"    if cs >= [MachineName.word]_first_final
+	"        println(\"ACCEPT\")
+	"    else
+	"        println(\"FAIL\")
+	"    end
+	"end
+
+send Output
+	~inp = [
+
+for InputString: indep::input_string in RagelTree {
+	send Output [^InputString ",\n"]
+}
+
+send Output
+	"\];
+	"
+
+send Output
+	"function main()
+	"    for data in inp
+	"        prepare()
+	"        exec(data)
+	"        finish()
+	"    end
+	"end
+    "
+    " main()
+
+send Output "#= _____OUTPUT_____
+for OutputLine: indep::output_line in RagelTree {
+	prints( Output OutputLine )
+}
+send Output "=#
+

@@ -20,7 +20,7 @@
 #   along with Ragel; if not, write to the Free Software
 #   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA 
 
-while getopts "gcnmleT:F:G:P:CDJRAZ" opt; do
+while getopts "gcnmleT:F:G:P:CDJRAZU" opt; do
 	case $opt in
 		T|F|G|P) 
 			genflags="$genflags -$opt$OPTARG"
@@ -37,7 +37,7 @@ while getopts "gcnmleT:F:G:P:CDJRAZ" opt; do
 		g) 
 			allow_generated="true"
 			;;
-		C|D|J|R|A|Z)
+		C|D|J|R|A|Z|U)
 			langflags="$langflags -$opt"
 			;;
 	esac
@@ -45,7 +45,7 @@ done
 
 [ -z "$minflags" ] && minflags="-n -m -l -e"
 [ -z "$genflags" ] && genflags="-T0 -T1 -F0 -F1 -G0 -G1 -G2"
-[ -z "$langflags" ] && langflags="-C -D -J -R -A -Z"
+[ -z "$langflags" ] && langflags="-C -D -J -R -A -Z -U"
 
 shift $((OPTIND - 1));
 
@@ -62,6 +62,7 @@ java_compiler="@JAVAC@"
 ruby_engine="@RUBY@"
 csharp_compiler="@GMCS@"
 go_compiler="@GOBIN@ build"
+julia_engine="@JULIA@"
 
 function test_error
 {
@@ -106,7 +107,7 @@ function run_test()
     [ $lang == csharp ] && out_args="-out:${binary}";
 
 	# Ruby doesn't need to be compiled.
-	if [ $lang != ruby ]; then
+	if [ $lang != ruby ] && [ $lang != julia ]; then
 		echo "$compiler ${cflags} ${out_args} ${code_src}"
 		if ! $compiler ${cflags} ${out_args} ${code_src}; then
 			test_error;
@@ -120,6 +121,7 @@ function run_test()
 		[ $lang = java ] && exec_cmd="java ${root}"
 		[ $lang = ruby ] && exec_cmd="ruby ${code_src}"
 		[ $lang = csharp ] && [ "$csharp_compiler" = gmcs ] && exec_cmd="mono ${exec_cmd}"
+		[ $lang = julia ] && exec_cmd="julia ${code_src}"
 
 		$exec_cmd 2>&1 > $output;
 		if diff --strip-trailing-cr $expected_out $output > /dev/null; then
@@ -209,10 +211,16 @@ for test_case; do
 			compiler=$go_compiler
 			cflags=""
 		;;
+		julia)
+			lang_opt="-U";
+			code_suffix=jl;
+			compiler=$julia_engine
+			cflags=""
+		;;
 		indep)
 			lang_opt="";
 
-			for lang in c d csharp go java ruby; do
+			for lang in c d csharp go java ruby julia; do
 				case $lang in 
 					c)
 						lf="-C"
@@ -237,6 +245,10 @@ for test_case; do
 					go)
 						lf="-Z"
 						trans=go;
+					;;
+					julia)
+						lf="-U"
+						trans=julia;
 					;;
 				esac
 
@@ -340,6 +352,22 @@ for test_case; do
 
 		for min_opt in $minflags; do
 			echo "$allow_minflags" | grep -e $min_opt >/dev/null || continue
+			for gen_opt in $genflags; do
+				echo "$allow_genflags" | grep -e $gen_opt >/dev/null || continue
+				run_test
+			done
+		done
+	;;
+
+	julia)
+		# Using genflags, get the allowed gen flags from the test case. If the
+		# test case doesn't specify assume that all gen flags are allowed.
+		allow_genflags=`sed '/@ALLOW_GENFLAGS:/s/^.*: *//p;d' $test_case`
+		[ -z "$allow_genflags" ] && allow_genflags="-T0 -T1 -F0 -F1"
+
+		for min_opt in $minflags; do
+			echo "$allow_minflags" | grep -e $min_opt >/dev/null || continue
+
 			for gen_opt in $genflags; do
 				echo "$allow_genflags" | grep -e $gen_opt >/dev/null || continue
 				run_test

@@ -28,7 +28,8 @@ bin_PROGRAMS = \
 	trans-go \
 	trans-cs \
 	trans-java \
-	trans-ruby
+	trans-ruby \
+	trans-julia
 
 ragel-parse: ragel-parse.lm
 	$(COLM) $<
@@ -73,4 +74,7 @@ trans-java$(EXEEXT): trans-java.lm trans.lm ../src/ragel.lm
 	$(COLM) -o $@ $<
 
 trans-ruby$(EXEEXT): trans-ruby.lm trans.lm ../src/ragel.lm
+	$(COLM) -o $@ $<
+
+trans-julia$(EXEEXT): trans-julia.lm trans.lm ../src/ragel.lm
 	$(COLM) -o $@ $<

@@ -273,7 +273,7 @@ void julia_num_list( NumList: num_list )
 	}
 }
 
-void julia_stmt ( Stmt: stmt )
+void julia_stmt( Stmt: stmt )
 {
 	if match Stmt
 		[`host `( string `, uint `) `={ TL: host::tok* host::`}=]
@@ -309,9 +309,9 @@ void julia_stmt ( Stmt: stmt )
 				"\[ [Array.num_list] \]
 	}
 	elsif match Stmt [Value: value] {
-		send Output
-			"[Value.value_pass.ident] :: "
-				"[julia_type(Value.value_pass.type)] = [Value.value_pass.number]
+        send Output
+            "[Value.value_pass.ident] = "
+                "convert([julia_type(Value.value_pass.type)], [Value.value_pass.number])
 	}
 	elsif match Stmt [
 			'if' O: `( IfExpr: expr C: `) IfStmt: stmt
@@ -350,19 +350,8 @@ void julia_stmt ( Stmt: stmt )
 
 		send Output
 			"@switch [julia_expr(SwitchExpr)] begin
-
-		for CaseStmt: stmt in repeat (StmtList) {
-			if match CaseStmt [`case CaseExpr: expr `:] {
-				send Output
-					"@case [julia_expr(CaseExpr)]
-			}
-			else {
-				julia_stmt(CaseStmt)
-			}
-		}
-
-		send Output
-			"end
+            "    [julia_stmt_list(StmtList)]
+            "end
 	}
 	elsif match Stmt [ExprExpr: expr Semi: `;] {
 		send Output
@@ -378,9 +367,7 @@ void julia_stmt ( Stmt: stmt )
 	{
 		if match D.opt_init ['=' Expr: expr] {
 			send Output
-				"[D.ident] '::' [julia_type(D.type)]"
-			send Output
-				"  = [julia_expr(Expr)]"
+				"[D.ident] = convert([julia_type(D.type)], [julia_expr(Expr)])
 			send Output ['\n']
 		}
 	}
@@ -397,6 +384,35 @@ void julia_stmt ( Stmt: stmt )
 	{
 		send Output
 			"[Stmt.index_stmt.ident] = 0
+	}
+    elsif match Stmt [default_block]
+    {
+        # TODO
+    }
+    elsif match Stmt [case_block]
+    {
+        send Output
+            "@case [julia_expr(Stmt.case_block.expr )]
+            "    [julia_stmt_list( Stmt.case_block._repeat_stmt )]
+            "    break
+    }
+    elsif match Stmt [case_label]
+    {
+        send Output
+            "@case [julia_expr(Stmt.case_label.expr )]
+    }
+	elsif match Stmt [label_stmt]
+	{
+		send Output
+			"@label [Stmt.label_stmt.ident]
+			"begin
+            "    [julia_stmt_list( Stmt.label_stmt._repeat_stmt )]
+            "end
+	}
+	elsif match Stmt [entry_loop]
+	{
+		send Output
+			[julia_stmt_list( Stmt.entry_loop._repeat_stmt )]
 	}
 	else {
 		# catches unspecified cases
