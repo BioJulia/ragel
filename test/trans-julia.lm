@@ -4,7 +4,7 @@ int rw_julia_factor( Factor: indep::factor )
 {
 	if match Factor [`first_token_char]
 	{
-		send Out "data\[ts\]"
+		send Out "data\[1+ts\]"
 	}
 	else if match Factor [tk_ident `[ expr `]]
 	{
@@ -52,7 +52,7 @@ void rw_julia_type( Type: indep::type )
 	}
 	elsif match Type [`char]
 	{
-		send Out "Int8"
+		send Out "Uint8"
 	}
 	elsif match Type [`ptr]
 	{
@@ -75,8 +75,11 @@ void rw_julia_expr( Expr: indep::expr )
 void rw_julia_opt_array( OptArr: indep::opt_arr )
 {
 	if OptArr.expr {
-		send Out "\[[rw_julia_expr( OptArr.expr )]\]"
+		send Out "[rw_julia_expr( OptArr.expr )]"
 	}
+    else {
+        send Out "0"
+    }
 }
 
 int rw_julia_var_decl( VarDecl: indep::var_decl )
@@ -84,20 +87,18 @@ int rw_julia_var_decl( VarDecl: indep::var_decl )
     OptArr: indep::opt_arr = VarDecl.opt_arr
 	if OptArr.expr {
 		send Out
-			"[$VarDecl.tk_ident] = [rw_julia_type( VarDecl.type )]\[\]
+			"[$VarDecl.tk_ident] = Array( [rw_julia_type( VarDecl.type )], [rw_julia_opt_array(OptArr)] )
 	}
 	else {
 		send Out
 			"[$VarDecl.tk_ident] = zero([rw_julia_type( VarDecl.type )])
 	}
-	#send Out
-	#	"[$VarDecl.tk_ident] = Array([rw_julia_type( VarDecl.type )], [rw_julia_opt_array(VarDecl.opt_arr)] ) ;
 }
 
 void rw_julia_opt_sub( OptSub: indep::opt_sub )
 {
 	if ( OptSub.expr )
-		send Out "\[[rw_julia_expr(OptSub.expr)]\]"
+		send Out "\[1 + [rw_julia_expr(OptSub.expr)]\]"
 }
 
 int rw_julia_expr_stmt( ExprStmt: indep::expr_stmt )
@@ -138,7 +139,7 @@ int rw_julia_print_stmt( Stmt: indep::print_stmt )
 	else if match Stmt [`print_buf E1: expr `, E2: expr `;]
 	{
 		send Out
-			"print( string ( [rw_julia_expr(E1)]\[:[rw_julia_expr(E2)]\] ));
+			"print( bytestring ( [rw_julia_expr(E1)]\[1:[rw_julia_expr(E2)]\] ));
 	}
 	else if match Stmt [`print_str expr `;]
 	{
@@ -148,7 +149,7 @@ int rw_julia_print_stmt( Stmt: indep::print_stmt )
 	else if match Stmt [`print_token `;]
 	{
 		send Out
-			"print( data\[ts:te\] );
+			"print( data\[1+ts:te\] );
 	}
 }
 
@@ -228,6 +229,8 @@ send Output
 	"
 	" using Switch
 	"
+    "let
+    "
 
 Init: indep::stmt* = RagelTree.Init
 for Stmt: indep::stmt in Init {
@@ -268,7 +271,6 @@ send Output
 	"%% write data;
 	"
 	"function prepare()
-    "    global cs, val, neg
 
 
 for Stmt: indep::stmt in Init {
@@ -285,7 +287,6 @@ send Output
 	"end
 	"
 	"function exec(data)
-    "    global cs, val, neg
 	"    p = 0
 	"    pe = length(data)
 
@@ -327,6 +328,9 @@ send Output
 	"end
     "
     " main()
+    "
+    "end # end let block
+    "
 
 send Output "#= _____OUTPUT_____
 for OutputLine: indep::output_line in RagelTree {

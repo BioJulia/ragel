@@ -387,7 +387,10 @@ void julia_stmt( Stmt: stmt )
 	}
     elsif match Stmt [default_block]
     {
-        # TODO
+        send Output
+            "@default
+			"[julia_stmt_list( Stmt.default_block._repeat_stmt )]
+			"break;
     }
     elsif match Stmt [case_block]
     {
