@@ -2,21 +2,15 @@
 void julia_tok_list( TL: host::tok* )
 {
 	for Tok: host::tok in repeat(TL) {
-		if match Tok [host::`${ StmtList: stmt* host::`}$] {
-			julia_stmt_list( StmtList )
-		}
-		elsif match Tok [host::`={ Expr: expr host::`}=] {
-			julia_expr( Expr )
-		}
-		elsif match Tok ["{"] {
-			send Output "begin
-		}
-		else if match Tok ["}"] {
-			send Output "end
-		}
-		else {
+		if match Tok [`${ StmtList: stmt* `}$]
+			send Output
+				"begin
+				"	[julia_stmt_list( StmtList )]
+				"end
+		elsif match Tok [host::`={ Expr: expr host::`}=]
+			send Output "([julia_expr( Expr )])"
+		else
 			send Output [Tok]
-		}
 	}
 }
 
@@ -305,12 +299,12 @@ void julia_stmt( Stmt: stmt )
 	}
 	elsif match Stmt [Array: array] {
 		send Output
-			"[Array.ident] = [julia_type(Array.type)] "
+			"const [Array.ident] = [julia_type(Array.type)] "
 				"\[ [Array.num_list] \]
 	}
 	elsif match Stmt [Value: value] {
         send Output
-            "[Value.value_pass.ident] = "
+            "const [Value.value_pass.ident] = "
                 "convert([julia_type(Value.value_pass.type)], [Value.value_pass.number])
 	}
 	elsif match Stmt [
